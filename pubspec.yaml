@@ -1,14 +1,17 @@
 name: bybit_api
 description: Dart SDK for crypto trading platform Bybit.
 version: 1.0.0
-# repository: https://github.com/my_org/my_repo
+repository: https://github.com/AmauryBuguet/bybit_api
 
 environment:
   sdk: ^3.0.3
 
 dependencies:
+  collection: ^1.17.2
+  convert: ^3.1.1
   crypto: ^3.0.3
   http: ^1.0.0
+  sortedmap: ^0.5.3
   web_socket_channel: ^2.4.0
 
 dev_dependencies:
