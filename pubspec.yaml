@@ -7,7 +7,7 @@ environment:
   sdk: ^3.0.3
 
 dependencies:
-  collection: ^1.17.2
+  collection: ^1.17.1
   convert: ^3.1.1
   crypto: ^3.0.3
   http: ^1.0.0
