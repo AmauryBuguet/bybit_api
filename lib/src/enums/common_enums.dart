@@ -1,4 +1,0 @@
-enum RequestType {
-  getRequest,
-  postRequest,
-}

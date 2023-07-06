@@ -1,11 +1,36 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:web_socket_channel/io.dart';
 
-import 'classes/common_classes.dart';
-import 'enums/common_enums.dart';
-import 'enums/derivatives_enums.dart';
+import 'common/classes/exception.dart';
+import 'common/classes/kline.dart';
+import 'common/enums/common_enums.dart';
+import 'rest/enums/rest_enums.dart';
+import 'rest/classes/closed_pnl.dart';
+import 'rest/classes/coin_balance.dart';
+import 'rest/classes/fee_rate.dart';
+import 'common/classes/order.dart';
+import 'rest/classes/order_book.dart';
+import 'common/classes/position.dart';
+import 'rest/classes/ticker_info.dart';
+import 'websockets/classes/execution.dart';
+import 'websockets/classes/kline.dart';
+import 'websockets/classes/liquidation.dart';
+import 'websockets/classes/order.dart';
+import 'websockets/classes/orderbook.dart';
+import 'websockets/classes/position.dart';
+import 'websockets/classes/ticker.dart';
+import 'websockets/classes/trade.dart';
+import 'websockets/classes/utils.dart';
+import 'websockets/classes/wallet.dart';
+import 'websockets/enums/channel.dart';
+import 'websockets/enums/depth.dart';
+import 'websockets/enums/topic.dart';
+import 'websockets/enums/ws_action.dart';
 
 /// Base class for all Bybit API operations
 ///
@@ -14,8 +39,8 @@ class BybitApi {
   /// Endpoint for rest requests
   final String endpoint = "api.bybit.com";
 
-  /// Endpoint for websockets
-  final String wsEndpoint = "wss://stream.binance.com:9443";
+  /// Endpoint for _openedWebsockets
+  final String wsEndpoint = "wss://stream.bybit.com/";
 
   /// API key that you can generate from your Bybit account
   String? apiKey;
@@ -25,6 +50,17 @@ class BybitApi {
 
   /// Time (in ms) during which the request is valid, defaults to 5000
   int recvWindow;
+
+  /// Opened webSockets
+  ///
+  /// Each websocket corresponds to a different channel
+  final List<Websocket> _openedWebsockets = [];
+
+  /// Stream _controller used to remap all streams outputs to 1 stream of json data.
+  final StreamController<Map<String, dynamic>> _controller = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Dynamic list of subscribed topics
+  List<Subscription> subscriptions = [];
 
   /// Constructor
   ///
@@ -38,7 +74,7 @@ class BybitApi {
   /// Helper function to perform any kind of request to Bybit API
   ///
   /// [documentation here](https://bybit-exchange.github.io/docs/v3/intro#authentication)
-  Future<dynamic> sendRequest({
+  Future<dynamic> _sendRequest({
     required String path,
     required RequestType type,
     bool signatureRequired = false,
@@ -101,6 +137,231 @@ class BybitApi {
     return result["result"];
   }
 
+  /// Helper function to subscribe to any websocket stream from Bybit API
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/derivatives/ws/connect)
+  void _wsConnect(Channel channel) {
+    if (_openedWebsockets.any((e) => e.channel == channel)) {
+      return;
+    }
+    String url = '$wsEndpoint/${channel.str}';
+    final socket = IOWebSocketChannel.connect(
+      url,
+      pingInterval: const Duration(minutes: 5),
+      connectTimeout: const Duration(seconds: 10),
+    );
+    _openedWebsockets.add(Websocket(channel: channel, socket: socket));
+    _controller.addStream(socket.stream.map((event) => jsonDecode(event)));
+    if (channel.isPrivate()) {
+      _wsAuthenticate(channel);
+    }
+  }
+
+  /// Send a command and arguments to Bybit over the websocket with the desired channel
+  void _wsRequest(WsAction action, List<dynamic> args, Channel channel) {
+    _openedWebsockets.singleWhereOrNull((e) => e.channel == channel)?.socket.sink.add(
+          jsonEncode(
+            {
+              "op": action.name,
+              if (args.isNotEmpty) "args": args,
+            },
+          ),
+        );
+  }
+
+  /// Athenticate the websocket connection
+  ///
+  /// This is useful for private endpoints
+  void _wsAuthenticate(Channel channel) {
+    if (apiKey == null || apiSecret == null) {
+      throw Exception("Missing API keys");
+    }
+    final timestamp = DateTime.now().millisecondsSinceEpoch + 2000;
+
+    final msg = utf8.encode('GET/realtime$timestamp');
+    final key = utf8.encode(apiSecret!);
+    final hmac = Hmac(sha256, key);
+    final signature = hmac.convert(msg).toString();
+    _wsRequest(
+      WsAction.auth,
+      [apiKey, timestamp, signature],
+      channel,
+    );
+  }
+
+  /// Disconnect the WebSocket with the specified channel
+  void wsDisconnect(Channel channel) {
+    _openedWebsockets.singleWhereOrNull((e) => e.channel == channel)?.socket.sink.close();
+    _openedWebsockets.removeWhere((e) => e.channel == channel);
+  }
+
+  /// Disconnect all connected webSockets
+  void wsDisconnectAll() {
+    for (final websocket in _openedWebsockets) {
+      websocket.socket.sink.close();
+    }
+    _openedWebsockets.clear();
+  }
+
+  /// Subscribe to a topic
+  void _subscribe(String name, Topic topic, Channel channel) {
+    if (!subscriptions.any((e) => e.name == name)) {
+      _wsRequest(WsAction.subscribe, [name], channel);
+      subscriptions.add(Subscription(topic: topic, channel: channel, name: name));
+    }
+  }
+
+  /// Unsubscribe from a particular topic name
+  ///
+  /// This does not disconnect the associated websocket
+  void unsubscribe(String name) {
+    final topic = subscriptions.singleWhereOrNull((e) => e.name == name);
+    if (topic != null) {
+      _wsRequest(WsAction.unsubscribe, [topic.topic], topic.channel);
+    }
+    subscriptions.removeWhere((e) => e.name == name);
+  }
+
+  /// Unsubscribe from all websockets with the specified topic
+  void unsubscribeFromTopic(Topic topic) {
+    final topics = subscriptions.where((e) => e.topic == topic);
+    for (final subscribedTopic in topics) {
+      _wsRequest(WsAction.unsubscribe, [subscribedTopic.name], subscribedTopic.channel);
+    }
+    subscriptions.removeWhere((e) => e.topic == topic);
+  }
+
+  /// Orderbook stream
+  ///
+  /// Once subscribe successfully, you will receive a snapshot first.
+  ///
+  /// Push frequency is determined according to selected Depth
+  ///
+  /// If you receive a new snapshot data, it is necessary to reset your local orderbook.
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/derivatives/ws-public/orderbook)
+  Stream<OrderbookUpdate> orderbookStream({
+    required String symbol,
+    required Depth depth,
+  }) {
+    final channel = Channel.publicChannelFromSymbol(symbol);
+    _wsConnect(channel);
+    final String topicName = "${Topic.orderbook.str}.${depth.str}.$symbol";
+    _subscribe(topicName, Topic.orderbook, channel);
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => OrderbookUpdate.fromJson(e));
+  }
+
+  /// Get recent public trades data in Bybit.
+  ///
+  /// Push frequency: real-time
+  ///
+  /// After subscription, you will be pushed delta trade message in real-time once there is an order filled.
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/derivatives/ws-public/trade)
+  Stream<TradeUpdate> publicTradeStream({
+    required String symbol,
+  }) {
+    final channel = Channel.publicChannelFromSymbol(symbol);
+    _wsConnect(channel);
+    final String topicName = "${Topic.publicTrade.str}.$symbol";
+    _subscribe(topicName, Topic.publicTrade, channel);
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => TradeUpdate.fromJson(e));
+  }
+
+  /// Get latest information of the symbol
+  ///
+  /// Push frequency: 100ms
+  ///
+  /// Future has snapshot and delta types. If a key does not exist in the field, it means the value is not changed.
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/derivatives/ws-public/ticker)
+  Stream<TickerUpdate> tickerStream({
+    required String symbol,
+  }) {
+    final channel = Channel.publicChannelFromSymbol(symbol);
+    _wsConnect(channel);
+    final String topicName = "${Topic.tickers.str}.$symbol";
+    _subscribe(topicName, Topic.tickers, channel);
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => TickerUpdate.fromJson(e));
+  }
+
+  /// Candlestick stream
+  ///
+  /// Push frequency: 1-60s
+  ///
+  /// If confirm is true, then the data is a final tick for this interval. Otherwise, it is a snapshot.
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/derivatives/ws-public/kline)
+  Stream<KlineUpdate> klineStream({
+    required String symbol,
+    required Interval interval,
+  }) {
+    final channel = Channel.publicChannelFromSymbol(symbol);
+    _wsConnect(channel);
+    final String topicName = "${Topic.kline.str}.${interval.str}.$symbol";
+    _subscribe(topicName, Topic.kline, channel);
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => KlineUpdate.fromJson(e));
+  }
+
+  /// Get recent liquidation orders in Bybit.
+  ///
+  /// Push frequency: real-time
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/derivatives/ws-public/liquidation)
+  Stream<LiquidationUpdate> liquidationStream({
+    required String symbol,
+  }) {
+    final channel = Channel.publicChannelFromSymbol(symbol);
+    _wsConnect(channel);
+    final String topicName = "${Topic.liquidation.str}.$symbol";
+    _subscribe(topicName, Topic.liquidation, channel);
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => LiquidationUpdate.fromJson(e));
+  }
+
+  /// Subscribe to the position stream to see changes to your position size, position setting changes, etc.
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/derivatives/ws-contract/position)
+  Stream<PositionUpdate> userContractPositionStream() {
+    final Channel channel = Channel.privateContract;
+    _wsConnect(channel);
+    final String topicName = "${Topic.userPosition.str}.contractAccount";
+    _subscribe(topicName, Topic.userPosition, channel);
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => PositionUpdate.fromJson(e));
+  }
+
+  /// Subscribe to the execution stream to see when an open order gets filled or partially filled.
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/derivatives/ws-contract/execution)
+  Stream<ExecutionUpdate> userContractExecutionStream() {
+    final Channel channel = Channel.privateContract;
+    _wsConnect(channel);
+    final String topicName = "${Topic.userExecution.str}.contractAccount";
+    _subscribe(topicName, Topic.userExecution, channel);
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => ExecutionUpdate.fromJson(e));
+  }
+
+  /// Subscribe to the order stream to see new orders, when an order's order status changes, etc.
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/derivatives/ws-contract/order)
+  Stream<OrderUpdate> userContractOrderStream() {
+    final Channel channel = Channel.privateContract;
+    _wsConnect(channel);
+    final String topicName = "${Topic.userOrder.str}.contractAccount";
+    _subscribe(topicName, Topic.userOrder, channel);
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => OrderUpdate.fromJson(e));
+  }
+
+  /// Subscribe to the wallet stream to see changes to your wallet in real-time.
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/derivatives/ws-contract/wallet)
+  Stream<WalletUpdate> userContractWalletStream() {
+    final Channel channel = Channel.privateContract;
+    _wsConnect(channel);
+    final String topicName = "${Topic.userWallet.str}.contractAccount";
+    _subscribe(topicName, Topic.userWallet, channel);
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => WalletUpdate.fromJson(e));
+  }
+
   /// Get candlestick data
   ///
   /// Max limit is 200, default is 200.
@@ -124,7 +385,7 @@ class BybitApi {
       if (limit != null) "limit": limit.toString(),
     };
     try {
-      final resp = await sendRequest(path: "/derivatives/v3/public/kline", type: RequestType.getRequest, params: params);
+      final resp = await _sendRequest(path: "/derivatives/v3/public/kline", type: RequestType.getRequest, params: params);
       return (resp["list"] as List<dynamic>).map((e) => Kline.fromList(e)).toList();
     } catch (e) {
       rethrow;
@@ -148,7 +409,7 @@ class BybitApi {
       if (limit != null) "limit": limit.toString(),
     };
     try {
-      final resp = await sendRequest(path: "/derivatives/v3/public/order-book/L2", type: RequestType.getRequest, params: params);
+      final resp = await _sendRequest(path: "/derivatives/v3/public/order-book/L2", type: RequestType.getRequest, params: params);
       return OrderBook.fromMap(resp as Map<String, dynamic>);
     } catch (e) {
       rethrow;
@@ -167,7 +428,7 @@ class BybitApi {
       if (category != null) "category": category.str,
     };
     try {
-      final resp = await sendRequest(path: "/derivatives/v3/public/tickers", type: RequestType.getRequest, params: params);
+      final resp = await _sendRequest(path: "/derivatives/v3/public/tickers", type: RequestType.getRequest, params: params);
       return TickerInfo.fromMap(resp["list"][0] as Map<String, dynamic>);
     } catch (e) {
       rethrow;
@@ -228,7 +489,7 @@ class BybitApi {
       if (slOrderType != null) "slOrderType": slOrderType.str,
     };
     try {
-      final resp = await sendRequest(
+      final resp = await _sendRequest(
         path: "/contract/v3/private/order/create",
         type: RequestType.postRequest,
         params: params,
@@ -271,7 +532,7 @@ class BybitApi {
       if (cursor != null) "cursor": cursor,
     };
     try {
-      final resp = await sendRequest(
+      final resp = await _sendRequest(
         path: "/contract/v3/private/order/unfilled-orders",
         type: RequestType.getRequest,
         params: params,
@@ -321,7 +582,7 @@ class BybitApi {
       if (slLimitPrice != null) "slLimitPrice": slLimitPrice,
     };
     try {
-      final resp = await sendRequest(
+      final resp = await _sendRequest(
         path: "/contract/v3/private/order/replace",
         type: RequestType.postRequest,
         params: params,
@@ -349,7 +610,7 @@ class BybitApi {
       if (orderLinkId != null) "orderLinkId": orderLinkId,
     };
     try {
-      await sendRequest(
+      await _sendRequest(
         path: "/contract/v3/private/order/cancel",
         type: RequestType.postRequest,
         params: params,
@@ -374,7 +635,7 @@ class BybitApi {
       if (settleCoin != null) "settleCoin": settleCoin,
     };
     try {
-      final resp = await sendRequest(
+      final resp = await _sendRequest(
         path: "/contract/v3/private/order/cancel-all",
         type: RequestType.postRequest,
         params: params,
@@ -412,7 +673,7 @@ class BybitApi {
       if (cursor != null) "cursor": cursor,
     };
     try {
-      final resp = await sendRequest(
+      final resp = await _sendRequest(
         path: "/contract/v3/private/order/list",
         type: RequestType.getRequest,
         params: params,
@@ -438,9 +699,9 @@ class BybitApi {
       if (settleCoin != null) "settleCoin": settleCoin,
     };
     try {
-      final resp = await sendRequest(
+      final resp = await _sendRequest(
         path: "/contract/v3/private/position/list",
-        type: RequestType.postRequest,
+        type: RequestType.getRequest,
         params: params,
         signatureRequired: true,
       );
@@ -468,7 +729,7 @@ class BybitApi {
       "positionIdx": positionIdx.str,
     };
     try {
-      await sendRequest(
+      await _sendRequest(
         path: "/contract/v3/private/position/set-auto-add-margin",
         type: RequestType.postRequest,
         params: params,
@@ -496,7 +757,7 @@ class BybitApi {
       "sellLeverage": leverage.toString(),
     };
     try {
-      await sendRequest(
+      await _sendRequest(
         path: "/contract/v3/private/position/switch-isolated",
         type: RequestType.postRequest,
         params: params,
@@ -527,7 +788,7 @@ class BybitApi {
       "positionMode": positionMode.str,
     };
     try {
-      await sendRequest(
+      await _sendRequest(
         path: "/contract/v3/private/position/switch-mode",
         type: RequestType.postRequest,
         params: params,
@@ -551,7 +812,7 @@ class BybitApi {
       "sellLeverage": leverage.toString(),
     };
     try {
-      await sendRequest(
+      await _sendRequest(
         path: "/contract/v3/private/position/set-leverage",
         type: RequestType.postRequest,
         params: params,
@@ -588,7 +849,7 @@ class BybitApi {
       if (cursor != null) "cursor": cursor,
     };
     try {
-      final resp = await sendRequest(
+      final resp = await _sendRequest(
         path: "/contract/v3/private/position/closed-pnl",
         type: RequestType.getRequest,
         params: params,
@@ -614,7 +875,7 @@ class BybitApi {
       if (coin != null) "coin": coin,
     };
     try {
-      final resp = await sendRequest(
+      final resp = await _sendRequest(
         path: "/contract/v3/private/account/wallet/balance",
         type: RequestType.getRequest,
         params: params,
@@ -636,7 +897,7 @@ class BybitApi {
       if (symbol != null) "symbol": symbol,
     };
     try {
-      final resp = await sendRequest(
+      final resp = await _sendRequest(
         path: "/contract/v3/private/account/fee-rate",
         type: RequestType.getRequest,
         params: params,

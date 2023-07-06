@@ -2,7 +2,30 @@
 library bybit_api;
 
 export 'src/bybit_api_base.dart';
-
-export 'src/classes/common_classes.dart';
-export 'src/enums/common_enums.dart';
-export 'src/enums/derivatives_enums.dart';
+export 'src/common/classes/book_order.dart';
+export 'src/common/classes/exception.dart';
+export 'src/common/classes/kline.dart';
+export 'src/common/enums/common_enums.dart';
+export 'src/rest/classes/closed_pnl.dart';
+export 'src/rest/classes/coin_balance.dart';
+export 'src/rest/classes/fee_rate.dart';
+export 'src/common/classes/order.dart';
+export 'src/rest/classes/order_book.dart';
+export 'src/common/classes/position.dart';
+export 'src/rest/classes/ticker_info.dart';
+export 'src/rest/enums/rest_enums.dart';
+export 'src/websockets/classes/execution.dart';
+export 'src/websockets/classes/kline.dart';
+export 'src/websockets/classes/liquidation.dart';
+export 'src/websockets/classes/order.dart';
+export 'src/websockets/classes/orderbook.dart';
+export 'src/websockets/classes/position.dart';
+export 'src/websockets/classes/ticker.dart';
+export 'src/websockets/classes/trade.dart';
+export 'src/websockets/classes/utils.dart';
+export 'src/websockets/classes/wallet.dart';
+export 'src/websockets/enums/channel.dart';
+export 'src/websockets/enums/depth.dart';
+export 'src/websockets/enums/topic.dart';
+export 'src/websockets/enums/update_type.dart';
+export 'src/websockets/enums/ws_action.dart';
