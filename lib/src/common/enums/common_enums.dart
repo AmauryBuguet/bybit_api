@@ -19,23 +19,24 @@ enum Side {
 }
 
 enum Interval {
-  m1("1"),
-  m3("3"),
-  m5("5"),
-  m15("15"),
-  m30("30"),
-  h1("60"),
-  h2("120"),
-  h4("240"),
-  h6("360"),
-  h12("720"),
-  daily("D"),
-  weekly("W"),
-  monthly("M");
+  m1("1", 60000),
+  m3("3", 180000),
+  m5("5", 300000),
+  m15("15", 900000),
+  m30("30", 1800000),
+  h1("60", 3600000),
+  h2("120", 7200000),
+  h4("240", 14400000),
+  h6("360", 21600000),
+  h12("720", 43200000),
+  daily("D", 86400000),
+  weekly("W", 604800000),
+  monthly("M", 2678400000);
 
   final String str;
+  final int nbMs;
 
-  const Interval(this.str);
+  const Interval(this.str, this.nbMs);
 
   static Interval fromStr(String str) {
     return Interval.values.singleWhere((e) => e.str == str);
