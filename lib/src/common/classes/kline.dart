@@ -33,7 +33,7 @@ class Kline {
     );
   }
 
-  factory Kline.fromJson(Map<String, dynamic> json) {
+  factory Kline.fromMap(Map<String, dynamic> json) {
     return Kline(
       timestamp: json['start'],
       open: double.parse(json['open']),

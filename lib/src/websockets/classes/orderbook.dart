@@ -18,12 +18,12 @@ class OrderbookUpdate {
     required this.seq,
   });
 
-  factory OrderbookUpdate.fromJson(Map<String, dynamic> json) {
+  factory OrderbookUpdate.fromMap(Map<String, dynamic> json) {
     return OrderbookUpdate(
       topic: json['topic'],
       type: UpdateType.fromStr(json['type']),
       ts: json['ts'],
-      data: OrderbookData.fromJson(json['data']),
+      data: OrderbookData.fromMap(json['data']),
       u: json['u'],
       seq: json['seq'],
     );
@@ -41,7 +41,7 @@ class OrderbookData {
     required this.asks,
   });
 
-  factory OrderbookData.fromJson(Map<String, dynamic> map) {
+  factory OrderbookData.fromMap(Map<String, dynamic> map) {
     return OrderbookData(
       symbol: map['s'],
       asks: List<BookOrder>.from(

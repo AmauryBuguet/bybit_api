@@ -16,11 +16,11 @@ class TickerUpdate {
     required this.ts,
   });
 
-  factory TickerUpdate.fromJson(Map<String, dynamic> json) {
+  factory TickerUpdate.fromMap(Map<String, dynamic> json) {
     return TickerUpdate(
       topic: json['topic'],
       type: UpdateType.fromStr(json['type']),
-      data: TickerData.fromJson(json['data']),
+      data: TickerData.fromMap(json['data']),
       crossSequence: json['cs'],
       ts: json['ts'],
     );
@@ -72,7 +72,7 @@ class TickerData {
     required this.ask1Size,
   });
 
-  factory TickerData.fromJson(Map<String, dynamic> json) {
+  factory TickerData.fromMap(Map<String, dynamic> json) {
     return TickerData(
       symbol: json['symbol'],
       tickDirection: json['tickDirection'] != null ? TickDirection.fromStr(json['tickDirection']) : null,

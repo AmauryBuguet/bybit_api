@@ -15,10 +15,10 @@ class KlineUpdate {
     required this.type,
   });
 
-  factory KlineUpdate.fromJson(Map<String, dynamic> json) {
+  factory KlineUpdate.fromMap(Map<String, dynamic> json) {
     return KlineUpdate(
       topic: json['topic'],
-      data: KlineData.fromJson(json['data'][0]),
+      data: KlineData.fromMap(json['data'][0]),
       ts: json['ts'],
       type: UpdateType.fromStr(json['type']),
     );
@@ -40,9 +40,9 @@ class KlineData {
     required this.timestamp,
   });
 
-  factory KlineData.fromJson(Map<String, dynamic> json) {
+  factory KlineData.fromMap(Map<String, dynamic> json) {
     return KlineData(
-      kline: Kline.fromJson(json),
+      kline: Kline.fromMap(json),
       end: json['end'],
       interval: Interval.fromStr(json['interval']),
       confirm: json['confirm'],

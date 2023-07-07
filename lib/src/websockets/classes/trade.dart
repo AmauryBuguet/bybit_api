@@ -14,12 +14,12 @@ class TradeUpdate {
     required this.data,
   });
 
-  factory TradeUpdate.fromJson(Map<String, dynamic> json) {
+  factory TradeUpdate.fromMap(Map<String, dynamic> json) {
     return TradeUpdate(
       topic: json['topic'],
       type: UpdateType.fromStr(json['type']),
       ts: json['ts'],
-      data: List<TradeData>.from(json['data'].map((data) => TradeData.fromJson(data))),
+      data: List<TradeData>.from(json['data'].map((data) => TradeData.fromMap(data))),
     );
   }
 }
@@ -45,7 +45,7 @@ class TradeData {
     required this.isBlockTrade,
   });
 
-  factory TradeData.fromJson(Map<String, dynamic> json) {
+  factory TradeData.fromMap(Map<String, dynamic> json) {
     return TradeData(
       timestamp: json['T'],
       symbol: json['s'],

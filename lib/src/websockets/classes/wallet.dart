@@ -7,10 +7,10 @@ class WalletUpdate {
     required this.data,
   });
 
-  factory WalletUpdate.fromJson(Map<String, dynamic> json) {
+  factory WalletUpdate.fromMap(Map<String, dynamic> json) {
     return WalletUpdate(
       topic: json['topic'],
-      data: List<WalletData>.from(json['data'].map((data) => WalletData.fromJson(data))),
+      data: List<WalletData>.from(json['data'].map((data) => WalletData.fromMap(data))),
     );
   }
 }
@@ -36,7 +36,7 @@ class WalletData {
     required this.cumRealisedPnl,
   });
 
-  factory WalletData.fromJson(Map<String, dynamic> json) {
+  factory WalletData.fromMap(Map<String, dynamic> json) {
     return WalletData(
       coin: json['coin'],
       equity: double.parse(json['equity']),

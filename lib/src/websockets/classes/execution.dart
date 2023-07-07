@@ -9,10 +9,10 @@ class ExecutionUpdate {
     required this.data,
   });
 
-  factory ExecutionUpdate.fromJson(Map<String, dynamic> json) {
+  factory ExecutionUpdate.fromMap(Map<String, dynamic> json) {
     return ExecutionUpdate(
       topic: json['topic'],
-      data: List<ExecutionData>.from(json['data'].map((data) => ExecutionData.fromJson(data))),
+      data: List<ExecutionData>.from(json['data'].map((data) => ExecutionData.fromMap(data))),
     );
   }
 }
@@ -64,7 +64,7 @@ class ExecutionData {
     required this.markPrice,
   });
 
-  factory ExecutionData.fromJson(Map<String, dynamic> json) {
+  factory ExecutionData.fromMap(Map<String, dynamic> json) {
     return ExecutionData(
       symbol: json['symbol'],
       execFee: double.parse(json['execFee']),

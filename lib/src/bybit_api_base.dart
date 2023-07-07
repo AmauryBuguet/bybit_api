@@ -9,6 +9,7 @@ import 'package:web_socket_channel/io.dart';
 import 'common/classes/exception.dart';
 import 'common/classes/kline.dart';
 import 'common/enums/common_enums.dart';
+import 'rest/classes/instrument_info.dart';
 import 'rest/enums/rest_enums.dart';
 import 'rest/classes/closed_pnl.dart';
 import 'rest/classes/coin_balance.dart';
@@ -248,7 +249,7 @@ class BybitApi {
     _wsConnect(channel);
     final String topicName = "${Topic.orderbook.str}.${depth.str}.$symbol";
     _subscribe(topicName, Topic.orderbook, channel);
-    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => OrderbookUpdate.fromJson(e));
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => OrderbookUpdate.fromMap(e));
   }
 
   /// Get recent public trades data in Bybit.
@@ -265,7 +266,7 @@ class BybitApi {
     _wsConnect(channel);
     final String topicName = "${Topic.publicTrade.str}.$symbol";
     _subscribe(topicName, Topic.publicTrade, channel);
-    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => TradeUpdate.fromJson(e));
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => TradeUpdate.fromMap(e));
   }
 
   /// Get latest information of the symbol
@@ -282,7 +283,7 @@ class BybitApi {
     _wsConnect(channel);
     final String topicName = "${Topic.tickers.str}.$symbol";
     _subscribe(topicName, Topic.tickers, channel);
-    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => TickerUpdate.fromJson(e));
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => TickerUpdate.fromMap(e));
   }
 
   /// Candlestick stream
@@ -300,7 +301,7 @@ class BybitApi {
     _wsConnect(channel);
     final String topicName = "${Topic.kline.str}.${interval.str}.$symbol";
     _subscribe(topicName, Topic.kline, channel);
-    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => KlineUpdate.fromJson(e));
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => KlineUpdate.fromMap(e));
   }
 
   /// Get recent liquidation orders in Bybit.
@@ -315,7 +316,7 @@ class BybitApi {
     _wsConnect(channel);
     final String topicName = "${Topic.liquidation.str}.$symbol";
     _subscribe(topicName, Topic.liquidation, channel);
-    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => LiquidationUpdate.fromJson(e));
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => LiquidationUpdate.fromMap(e));
   }
 
   /// Subscribe to the position stream to see changes to your position size, position setting changes, etc.
@@ -326,7 +327,7 @@ class BybitApi {
     _wsConnect(channel);
     final String topicName = "${Topic.userPosition.str}.contractAccount";
     _subscribe(topicName, Topic.userPosition, channel);
-    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => PositionUpdate.fromJson(e));
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => PositionUpdate.fromMap(e));
   }
 
   /// Subscribe to the execution stream to see when an open order gets filled or partially filled.
@@ -337,7 +338,7 @@ class BybitApi {
     _wsConnect(channel);
     final String topicName = "${Topic.userExecution.str}.contractAccount";
     _subscribe(topicName, Topic.userExecution, channel);
-    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => ExecutionUpdate.fromJson(e));
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => ExecutionUpdate.fromMap(e));
   }
 
   /// Subscribe to the order stream to see new orders, when an order's order status changes, etc.
@@ -348,7 +349,7 @@ class BybitApi {
     _wsConnect(channel);
     final String topicName = "${Topic.userOrder.str}.contractAccount";
     _subscribe(topicName, Topic.userOrder, channel);
-    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => OrderUpdate.fromJson(e));
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => OrderUpdate.fromMap(e));
   }
 
   /// Subscribe to the wallet stream to see changes to your wallet in real-time.
@@ -359,7 +360,7 @@ class BybitApi {
     _wsConnect(channel);
     final String topicName = "${Topic.userWallet.str}.contractAccount";
     _subscribe(topicName, Topic.userWallet, channel);
-    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => WalletUpdate.fromJson(e));
+    return _controller.stream.where((e) => e["topic"] == topicName).map((e) => WalletUpdate.fromMap(e));
   }
 
   /// Get candlestick data
@@ -430,6 +431,35 @@ class BybitApi {
     try {
       final resp = await _sendRequest(path: "/derivatives/v3/public/tickers", type: RequestType.getRequest, params: params);
       return TickerInfo.fromMap(resp["list"][0] as Map<String, dynamic>);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Query for the instrument specification of online trading pairs.
+  ///
+  /// Works only for linear and inverse categories
+  ///
+  /// [documentation here](https://bybit-exchange.github.io/docs/v5/market/instrument)
+  Future<List<InstrumentInfo>> getInstrumentsInfo({
+    required Category category,
+    String? symbol,
+    SymbolStatus? status,
+    String? baseCoin,
+    int? limit,
+    String? cursor,
+  }) async {
+    Map<String, String> params = {
+      "category": category.str,
+      if (symbol != null) "symbol": symbol,
+      if (status != null) "status": status.str,
+      if (baseCoin != null) "baseCoin": baseCoin,
+      if (limit != null) "limit": limit.toString(),
+      if (cursor != null) "cursor": cursor,
+    };
+    try {
+      final resp = await _sendRequest(path: "/v5/market/instruments-info", type: RequestType.getRequest, params: params);
+      return (resp["list"] as List<dynamic>).map((e) => InstrumentInfo.fromMap(e)).toList();
     } catch (e) {
       rethrow;
     }

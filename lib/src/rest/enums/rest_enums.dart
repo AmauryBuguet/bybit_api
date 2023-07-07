@@ -98,3 +98,34 @@ enum UnifiedMarginStatus {
     return UnifiedMarginStatus.values.singleWhere((e) => e.str == str);
   }
 }
+
+enum SymbolStatus {
+  preLaunch("PreLaunch"),
+  trading("Trading"),
+  settling("Settling"),
+  delivering("Delivering"),
+  closed("Closed");
+
+  final String str;
+
+  const SymbolStatus(this.str);
+
+  static SymbolStatus fromStr(String str) {
+    return SymbolStatus.values.singleWhere((e) => e.str == str);
+  }
+}
+
+enum ContractType {
+  inversePerpetual("InversePerpetual"),
+  linearPerpetual("LinearPerpetual"),
+  linearFutures("LinearFutures"),
+  inverseFutures("InverseFutures");
+
+  final String str;
+
+  const ContractType(this.str);
+
+  static ContractType fromStr(String str) {
+    return ContractType.values.singleWhere((e) => e.str == str);
+  }
+}

@@ -14,9 +14,9 @@ class LiquidationUpdate {
     required this.type,
   });
 
-  factory LiquidationUpdate.fromJson(Map<String, dynamic> json) {
+  factory LiquidationUpdate.fromMap(Map<String, dynamic> json) {
     return LiquidationUpdate(
-      data: LiquidationData.fromJson(json['data']),
+      data: LiquidationData.fromMap(json['data']),
       topic: json['topic'],
       ts: json['ts'],
       type: UpdateType.fromStr(json['type']),
@@ -39,7 +39,7 @@ class LiquidationData {
     required this.updatedTime,
   });
 
-  factory LiquidationData.fromJson(Map<String, dynamic> json) {
+  factory LiquidationData.fromMap(Map<String, dynamic> json) {
     return LiquidationData(
       price: double.parse(json['price']),
       side: Side.fromStr(json['side']),

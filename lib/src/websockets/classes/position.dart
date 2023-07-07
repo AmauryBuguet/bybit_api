@@ -9,7 +9,7 @@ class PositionUpdate {
     required this.data,
   });
 
-  factory PositionUpdate.fromJson(Map<String, dynamic> json) {
+  factory PositionUpdate.fromMap(Map<String, dynamic> json) {
     return PositionUpdate(
       topic: json['topic'],
       data: List<Position>.from(json['data'].map((data) => Position.fromMap(data))),
